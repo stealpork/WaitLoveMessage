@@ -703,9 +703,8 @@ class MainWindow(QMainWindow):
         hero_title = QLabel("ATTENTION\nSWITCH")
         hero_title.setObjectName("heroTitle")
         hero_copy = QLabel(
-            "Шуточный пульт тревоги: подключаешь Telegram, ставишь один чат на слежку, "
-            "и при новом сообщении все сворачивается, Telegram прыгает на чат, а сверху "
-            "орет заметный баннер."
+            "При сообщении от твоего любимого человека, эта программа свернет все окна и перейдет к заданному чату с заметным баннером\n"
+            "Все, чтобы ты, Андрей, больше не ругался!"
         )
         hero_copy.setWordWrap(True)
         hero_copy.setObjectName("heroCopy")
