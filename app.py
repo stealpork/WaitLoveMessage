@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
-import io
 import json
-import math
 import os
 import platform
 import re
 import sys
 import threading
 import urllib.parse
-import wave
 from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
@@ -205,42 +202,37 @@ class ConfigStore:
 
 class AlertSound:
     def __init__(self) -> None:
-        self.wave_data = self._build_wave_data()
+        self.stop_event = threading.Event()
+        self.play_thread: threading.Thread | None = None
 
-    def _build_wave_data(self) -> bytes:
-        buffer = io.BytesIO()
-        sample_rate = 44100
-        duration = 1.8
-        frame_count = int(sample_rate * duration)
-        with wave.open(buffer, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            for index in range(frame_count):
-                t = index / sample_rate
-                segment = int(t / 0.18) % 2
-                frequency = 920 if segment == 0 else 1380
-                envelope = 0.58 * (1 - min((t % 0.18) / 0.18, 1.0) * 0.18)
-                sample = int(
-                    32767
-                    * envelope
-                    * math.sin(2 * math.pi * frequency * t)
-                )
-                wav_file.writeframesraw(sample.to_bytes(2, "little", signed=True))
-        return buffer.getvalue()
+    def _beep_loop(self) -> None:
+        pattern = [
+            (1200, 180),
+            (1650, 180),
+            (1200, 180),
+            (1650, 220),
+            (980, 420),
+        ]
+        while not self.stop_event.is_set():
+            for frequency, duration_ms in pattern:
+                if self.stop_event.is_set():
+                    return
+                try:
+                    winsound.Beep(frequency, duration_ms)
+                except RuntimeError:
+                    return
 
     def play(self) -> None:
         if winsound is None:
             QApplication.beep()
             return
-        winsound.PlaySound(
-            self.wave_data,
-            winsound.SND_MEMORY | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
-        )
+        self.stop()
+        self.stop_event.clear()
+        self.play_thread = threading.Thread(target=self._beep_loop, daemon=True)
+        self.play_thread.start()
 
     def stop(self) -> None:
-        if winsound is not None:
-            winsound.PlaySound(None, 0)
+        self.stop_event.set()
 
 
 class WindowsController:
@@ -1302,18 +1294,6 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-def enable_windows_dpi() -> None:
-    if platform.system() != "Windows":
-        return
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
-
-
 def main() -> int:
     if platform.system() == "Windows":
         try:
@@ -1321,7 +1301,6 @@ def main() -> int:
         except Exception:
             pass
 
-    enable_windows_dpi()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setApplicationName("Attention Switch")
